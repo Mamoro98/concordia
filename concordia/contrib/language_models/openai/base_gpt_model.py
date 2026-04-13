@@ -90,24 +90,33 @@ class BaseGPTModel(language_model.LanguageModel):
         {'role': 'user', 'content': prompt},
     ]
 
-    response = self._client.chat.completions.create(
+    kwargs = dict(
         model=self._model_name,
         messages=messages,
         temperature=temperature,
         max_completion_tokens=max_tokens,
         timeout=timeout,
         seed=seed,
-        reasoning_effort=reasoning_effort,
-        verbosity=verbosity,
     )
+    # reasoning_effort and verbosity are GPT-5 specific parameters;
+    # only include them for OpenAI models that support them.
+    if any(tag in self._model_name.lower() for tag in ('gpt', 'o1', 'o3', 'o4')):
+      kwargs['reasoning_effort'] = reasoning_effort
+      kwargs['verbosity'] = verbosity
+
+    response = self._client.chat.completions.create(**kwargs)
+
+    content = response.choices[0].message.content
+    if content is None:
+      content = ''
 
     if self._measurements is not None:
       self._measurements.publish_datum(
           self._channel,
-          {'raw_text_length': len(response.choices[0].message.content)},
+          {'raw_text_length': len(content)},
       )
 
-    return response.choices[0].message.content
+    return content
 
   @override
   def sample_text(
@@ -160,10 +169,17 @@ class BaseGPTModel(language_model.LanguageModel):
           temperature=1.0,
           seed=seed,
       )
+      # Strip whitespace and punctuation for fuzzy matching
+      clean = answer.strip().rstrip('.').strip()
       try:
-        idx = responses.index(answer)
+        idx = responses.index(clean)
       except ValueError:
-        continue
+        # Also try lowercase match
+        lower_responses = [r.lower() for r in responses]
+        try:
+          idx = lower_responses.index(clean.lower())
+        except ValueError:
+          continue
       else:
         if self._measurements is not None:
           self._measurements.publish_datum(
