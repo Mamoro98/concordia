@@ -41,6 +41,7 @@ class Entity(prefab_lib.Prefab):
       default_factory=lambda: {
           'name': 'Alice',
           'goal': '',
+          'persona': '',
           'randomize_choices': True,
           'prefix_entity_name': True,
           'observation_history_length':
@@ -73,6 +74,7 @@ class Entity(prefab_lib.Prefab):
     """
     entity_name = self.params.get('name', 'Alice')
     entity_goal = self.params.get('goal', '')
+    entity_persona = self.params.get('persona', '')
     randomize_choices = self.params.get('randomize_choices', True)
     prefix_entity_name = self.params.get('prefix_entity_name', True)
     observation_history_length = self.params.get(
@@ -161,6 +163,15 @@ class Entity(prefab_lib.Prefab):
       goal_key = None
       overarching_goal = None
 
+    if entity_persona:
+      persona_key = 'Persona'
+      persona_component = agent_components.constant.Constant(
+          state=entity_persona, pre_act_label='\nPersona'
+      )
+    else:
+      persona_key = None
+      persona_component = None
+
     components_of_agent = {
         instructions_key: instructions,
         observation_to_memory_key: observation_to_memory,
@@ -177,6 +188,11 @@ class Entity(prefab_lib.Prefab):
       components_of_agent[goal_key] = overarching_goal
       # Place goal after the instructions.
       component_order.insert(1, goal_key)
+
+    if persona_component is not None:
+      components_of_agent[persona_key] = persona_component
+      # Place persona right after instructions, before goal if present.
+      component_order.insert(1, persona_key)
 
     act_component = agent_components.concat_act_component.ConcatActComponent(
         model=model,
